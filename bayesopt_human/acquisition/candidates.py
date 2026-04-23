@@ -97,9 +97,11 @@ class CandidateGenerator:
         if cand:
             candidates.append(cand)
 
-        # Strategy 2: Max-min distance (surrogate)
+        # Strategy 2: Max-min distance (surrogate). Categorised as
+        # model-based exploration because the surrogate metric uses the GP's
+        # learned length scales.
         cand = self._try_strategy(
-            "Max-min distance (surrogate)", "space-filling",
+            "Max-min distance (surrogate)", "exploration",
             lambda: max_min_distance_surrogate(X, sur_transform, n_dim),
             fitted_gp, X, y, normalizer, sur_transform,
         )

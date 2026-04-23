@@ -247,6 +247,7 @@ class TestChooseCandidateSaveTo:
             candidate_normalized=cand.coordinates_normalized,
             rationale="test",
             confidence="high",
+            arm="balanced",
         )
         data = DataPayload(
             df=pd.DataFrame(),
@@ -322,6 +323,7 @@ class TestStatePersistence:
             candidate_normalized=cand.coordinates_normalized,
             rationale="test",
             confidence="high",
+            arm="balanced",
         )
         data = DataPayload(
             df=pd.DataFrame(),

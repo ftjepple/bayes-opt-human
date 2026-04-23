@@ -256,16 +256,83 @@ candidates plus plain-language rationales. Each recommendation is a structured
 object carrying the candidate coordinates, source strategy, rationale,
 confidence level, and priority.
 
-The rules are horizon-stage-aware:
+The engine allocates weight across four strategy arms and scores each
+candidate as `w_arm · within-arm percentile`.
 
-- **Early stage** (remaining > 50% of horizon): prefer space-filling and
-  exploration; tolerate low-confidence GP fits.
-- **Mid stage** (20–50% remaining): EI and balanced UCB/LCB become primary.
-  GP-vs-SVM disagreement raises a caution flag.
-- **Late stage** (< 20% remaining): exploitation-heavy candidates dominate
-  (low-κ UCB/LCB, EI, max GP mean).
-- **Final evaluation** (remaining = 1): max GP mean is primary. Conditioning
-  warnings downgrade confidence.
+**Signals.** Four scalar signals drive the allocation:
+
+- **u (urgency)** = `1 − (remaining − 1) / (budget − 1)`. Rises from 0 at the
+  start to 1 on the final evaluation.
+- **q (GP quality)** = `exp(−|log(calibration_var)|)`. Peaks at 1 when the
+  LOO standardized-residual variance is 1.0, decays symmetrically in log
+  space when σ is too small or too large.
+- **s (stagnation)** = `max(0, (s_raw − 0.3) / 0.7)`, where
+  `s_raw = stag_length / n_opt_obs`. A 30% deadband suppresses small-sample
+  noise early in the run.
+- **c (coverage need)** = `1 − 1/ratio_to_optimal`. Rises when observed
+  points leave large gaps in the search space.
+
+From these, two pulls:
+
+    exploit_pull = u
+    explore_pull = clip(1, (1 − u) + s + c)
+
+Additive aggregation of the three exploration drivers lets "stagnating
+*and* undersampled" be a stronger case for exploring than either alone.
+
+**Arm weights.** Four arms — matching the four candidate categories —
+receive weight:
+
+| Arm | Candidates | Weight (unnormalized) |
+|---|---|---|
+| **exploit** | Max GP Mean, low-κ UCB/LCB | `exploit_pull · max(q, 0.2)` |
+| **balanced** | EI, medium-κ UCB/LCB | `0.5 · (exploit_pull + explore_pull) · √q` |
+| **model-explore** | Max-PV, high-κ UCB/LCB, Max-min distance (surrogate) | `explore_pull · q` |
+| **geometric-explore** | Max-min distance (flat) | `explore_pull · (1 − q) + 0.05` |
+
+Weights are normalized to sum to 1. Three design points:
+
+- The `max(q, 0.2)` floor on the exploit arm preserves a minimum exploit
+  option when the GP is badly miscalibrated — even a suspect µ carries
+  some ranking information.
+- The `√q` on the balanced arm captures EI's graceful degradation under
+  poor calibration; it is less q-sensitive than the model-explore arm.
+- The `+ 0.05` on the geometric arm keeps it alive as a safety option
+  even when the GP is perfectly calibrated.
+
+The key coupling: **calibration decides whether exploration is
+model-based or geometric**. When `q → 1`, exploration weight flows to
+the Max-PV / high-κ UCB arm; when `q → 0`, it flows to flat max-min
+distance, which does not depend on the GP at all.
+
+**Per-candidate score.** Each candidate is ranked against peers in the
+*same arm* on the arm's natural metric (μ, EI, σ, flat coverage gain),
+yielding a within-arm percentile `p_within ∈ [0, 1]`. The global score
+is then
+
+    score_i = w_arm(i) · p_within(i).
+
+The top candidate in each arm is flagged `is_arm_winner`, and surfaced
+with a ★ in the candidate table so the user can always see "the best
+geometric option", "the best exploit option", etc. regardless of overall
+rank. A separate diversify step demotes near-duplicates (two candidates
+within half the average KNN distance are not both surfaced at the top).
+
+Qualitative horizon behaviour:
+
+- **Early stage** (remaining > 50% of horizon): explore-pull is high;
+  allocation is dominated by model-explore or geometric-explore depending
+  on GP calibration.
+- **Mid stage** (20–50% remaining): the balanced arm (EI, medium-κ
+  UCB/LCB) carries a growing share. GP-vs-SVM disagreement downgrades
+  confidence.
+- **Late stage** (< 20% remaining): exploit-pull dominates; the exploit
+  arm usually wins.
+- **Final evaluation** (remaining = 1): if the GP is well-calibrated the
+  exploit arm dominates. If the GP is badly miscalibrated, the geometric
+  arm keeps most of the weight — the design choice being that trusting a
+  broken model's mean on the last round is worse than one last geometric
+  probe.
 
 Confidence is derived from LOO-MAE (relative to target IQR), conditioning
 warnings, and length-scale stability.

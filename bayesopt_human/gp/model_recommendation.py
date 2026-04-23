@@ -117,10 +117,24 @@ def recommend_model(
 
     # Gate 2: Hard switch — status quo is demoted
     if getattr(status_quo, "demoted", False):
+        sq_label = _kernel_label(status_quo)
+        if not non_demoted:
+            # Every candidate has critical diagnostics. Keeping the current
+            # choice is preferable to switching to another equally-compromised
+            # model.
+            return ModelRecommendation(
+                action=ModelAction.KEEP,
+                recommended_idx=prev_choice_idx,
+                rationale=(
+                    f"Previous choice {status_quo.output_transform} "
+                    f"({sq_label}) has critical diagnostics, but every "
+                    f"other candidate is similarly compromised. Keeping the "
+                    f"current choice to avoid an unprincipled switch."
+                ),
+            )
         rec_idx = _parsimony_pick(candidates, non_demoted)
         mc = candidates[rec_idx]
         label = _kernel_label(mc)
-        sq_label = _kernel_label(status_quo)
         return ModelRecommendation(
             action=ModelAction.SWITCH,
             recommended_idx=rec_idx,

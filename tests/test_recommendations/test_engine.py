@@ -187,7 +187,7 @@ class TestNormalize:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: ASSESS
+# Phase 2: ASSESS (signals)
 # ---------------------------------------------------------------------------
 
 class TestAssess:
@@ -197,8 +197,8 @@ class TestAssess:
         engine = RecommendationEngine(config)
         y = _improving_y(5)
 
-        urgency, _, _ = engine._assess(_make_gp_report(), y)
-        assert urgency < 0.2
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        assert sig.urgency < 0.2
 
     def test_urgency_at_end(self):
         """At final evaluation, urgency is 1.0."""
@@ -206,8 +206,8 @@ class TestAssess:
         engine = RecommendationEngine(config)
         y = _improving_y(49)
 
-        urgency, _, _ = engine._assess(_make_gp_report(), y)
-        assert urgency == pytest.approx(1.0)
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        assert sig.urgency == pytest.approx(1.0)
 
     def test_gp_quality_perfect(self):
         """calibration_var=1.0 gives gp_quality=1.0."""
@@ -215,8 +215,10 @@ class TestAssess:
         engine = RecommendationEngine(config)
         y = _improving_y(20)
 
-        _, gp_quality, _ = engine._assess(_make_gp_report(calibration_var=1.0), y)
-        assert gp_quality == pytest.approx(1.0)
+        sig = engine._compute_signals(
+            _make_gp_report(calibration_var=1.0), y, _make_coverage(),
+        )
+        assert sig.gp_quality == pytest.approx(1.0)
 
     def test_gp_quality_poor(self):
         """Far-from-1.0 calibration_var gives low gp_quality."""
@@ -224,8 +226,10 @@ class TestAssess:
         engine = RecommendationEngine(config)
         y = _improving_y(20)
 
-        _, gp_quality, _ = engine._assess(_make_gp_report(calibration_var=0.01), y)
-        assert gp_quality < 0.2
+        sig = engine._compute_signals(
+            _make_gp_report(calibration_var=0.01), y, _make_coverage(),
+        )
+        assert sig.gp_quality < 0.2
 
     def test_stagnation_pressure(self):
         """Stagnating observations produce positive stagnation pressure."""
@@ -233,95 +237,165 @@ class TestAssess:
         engine = RecommendationEngine(config)
         y = _stagnant_y(20, stag_length=10)
 
-        _, _, stag = engine._assess(_make_gp_report(), y)
-        assert stag > 0.3
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        # stag_raw = 10/20 = 0.5; deadband at 0.3 → s = (0.5 - 0.3)/0.7 ≈ 0.29
+        assert sig.stagnation > 0.2
 
     def test_no_stagnation(self):
-        """Steadily improving observations have near-zero stagnation."""
+        """Steadily improving observations have zero stagnation signal."""
         config = _make_config(n_obs=20, remaining=30, horizon=50)
         engine = RecommendationEngine(config)
         y = _improving_y(20)
 
-        _, _, stag = engine._assess(_make_gp_report(), y)
-        assert stag < 0.1
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        assert sig.stagnation == 0.0
+
+    def test_stagnation_deadband(self):
+        """Small stagnation below the 0.3 deadband is suppressed to 0."""
+        config = _make_config(n_obs=20, remaining=30, horizon=50)
+        engine = RecommendationEngine(config)
+        # 4 stagnant / 20 = 0.2 raw, below the 0.3 deadband
+        y = _stagnant_y(20, stag_length=4)
+
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        assert sig.stagnation_raw > 0.0
+        assert sig.stagnation == 0.0
 
 
 # ---------------------------------------------------------------------------
-# Phase 3: SCORE
+# Phase 3-4: ALLOCATE + SCORE (arm weights + per-candidate ranking)
 # ---------------------------------------------------------------------------
 
 class TestScore:
-    def test_late_stage_favors_exploitation(self):
-        """Late stage (high urgency) should rank exploitation higher."""
+    def test_late_stage_favors_exploit_arm(self):
+        """Late stage pushes weight toward the exploit arm."""
         config = _make_config(n_obs=45, remaining=5, horizon=50)
         engine = RecommendationEngine(config)
         y = _improving_y(45)
 
         candidates = [
-            _make_candidate("Explorer", posterior_mean=5.0, posterior_std=2.0, ei=0.01),
-            _make_candidate("Exploiter", posterior_mean=0.5, posterior_std=0.1, ei=0.05),
+            _make_candidate(
+                "Exploiter", category="exploitation",
+                posterior_mean=0.5, posterior_std=0.1, ei=0.05,
+                coords_norm=np.array([0.2, 0.2]),
+            ),
+            _make_candidate(
+                "Explorer", category="exploration",
+                posterior_mean=5.0, posterior_std=2.0, ei=0.01,
+                coords_norm=np.array([0.8, 0.8]),
+            ),
         ]
 
         recs = engine.generate(
             candidates, _make_gp_report(), _make_coverage(),
             _make_svm_report(), y,
         )
-
         assert recs[0].source == "Exploiter"
+        assert recs[0].arm == "exploitation"
 
-    def test_poor_gp_forces_exploration(self):
-        """Poor GP quality drives α up, favoring exploration."""
+    def test_poor_gp_forces_geometric_exploration(self):
+        """Poor GP calibration pushes weight toward the geometric arm."""
         config = _make_config(n_obs=20, remaining=30, horizon=50)
         engine = RecommendationEngine(config)
         y = _improving_y(20)
 
         candidates = [
-            _make_candidate("Explorer", posterior_mean=5.0, posterior_std=2.0, ei=0.01),
-            _make_candidate("Exploiter", posterior_mean=0.5, posterior_std=0.1, ei=0.01),
+            _make_candidate(
+                "Geometric", category="space-filling",
+                coords_norm=np.array([0.3, 0.3]),
+            ),
+            _make_candidate(
+                "Exploiter", category="exploitation",
+                posterior_mean=0.5, posterior_std=0.1, ei=0.01,
+                coords_norm=np.array([0.7, 0.7]),
+            ),
         ]
 
         recs = engine.generate(
             candidates, _make_gp_report(calibration_var=0.01), _make_coverage(),
             _make_svm_report(), y,
         )
+        assert recs[0].source == "Geometric"
+        assert recs[0].arm == "space-filling"
 
-        assert recs[0].source == "Explorer"
-
-    def test_final_evaluation_pure_exploit(self):
-        """With remaining=1, exploitation should dominate."""
+    def test_final_evaluation_with_good_gp_picks_exploit(self):
+        """Final evaluation with a trusted GP picks the exploit arm."""
         config = _make_config(n_obs=49, remaining=1, horizon=50)
         engine = RecommendationEngine(config)
         y = _improving_y(49)
 
         candidates = [
-            _make_candidate("Explorer", posterior_mean=5.0, posterior_std=2.0, ei=0.01),
-            _make_candidate("Exploiter", posterior_mean=0.1, posterior_std=0.1, ei=0.01),
+            _make_candidate(
+                "Exploiter", category="exploitation",
+                posterior_mean=0.1, posterior_std=0.1, ei=0.01,
+                coords_norm=np.array([0.2, 0.2]),
+            ),
+            _make_candidate(
+                "Explorer", category="exploration",
+                posterior_mean=5.0, posterior_std=2.0, ei=0.01,
+                coords_norm=np.array([0.8, 0.8]),
+            ),
         ]
 
         recs = engine.generate(
             candidates, _make_gp_report(), _make_coverage(),
             _make_svm_report(), y,
         )
-
         assert recs[0].source == "Exploiter"
 
     def test_stagnation_forces_exploration(self):
-        """Stagnation pressure pushes α up, favoring exploration."""
+        """Stagnation pushes weight away from the exploit arm."""
         config = _make_config(n_obs=20, remaining=30, horizon=50)
         engine = RecommendationEngine(config)
         y = _stagnant_y(20, stag_length=15)
 
         candidates = [
-            _make_candidate("Explorer", posterior_mean=5.0, posterior_std=2.0, ei=0.01),
-            _make_candidate("Exploiter", posterior_mean=0.5, posterior_std=0.1, ei=0.01),
+            _make_candidate(
+                "Explorer", category="exploration",
+                posterior_mean=5.0, posterior_std=2.0, ei=0.01,
+                coords_norm=np.array([0.2, 0.2]),
+            ),
+            _make_candidate(
+                "Exploiter", category="exploitation",
+                posterior_mean=0.5, posterior_std=0.1, ei=0.01,
+                coords_norm=np.array([0.8, 0.8]),
+            ),
         ]
 
         recs = engine.generate(
             candidates, _make_gp_report(), _make_coverage(),
             _make_svm_report(), y,
         )
+        assert recs[0].arm != "exploitation"
 
-        assert recs[0].source == "Explorer"
+    def test_arm_winner_flag(self):
+        """The top candidate within each arm is flagged is_arm_winner."""
+        config = _make_config()
+        engine = RecommendationEngine(config)
+        y = _improving_y(20)
+
+        # Two candidates in the balanced arm with different EIs, one in exploit
+        candidates = [
+            _make_candidate(
+                "EI-low", category="balanced", ei=0.05,
+                coords_norm=np.array([0.1, 0.1]),
+            ),
+            _make_candidate(
+                "EI-high", category="balanced", ei=0.50,
+                coords_norm=np.array([0.5, 0.5]),
+            ),
+            _make_candidate(
+                "Exploit", category="exploitation", posterior_mean=0.1,
+                coords_norm=np.array([0.9, 0.9]),
+            ),
+        ]
+
+        recs = engine.generate(
+            candidates, _make_gp_report(), _make_coverage(),
+            _make_svm_report(), y,
+        )
+        winners = {r.source for r in recs if r.is_arm_winner}
+        assert winners == {"EI-high", "Exploit"}
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +476,8 @@ class TestAnnotate:
         assert confidences["High"] == "high"
         assert confidences["Low"] == "low"
 
-    def test_rationale_mentions_alpha(self):
-        """Every rationale should mention α."""
+    def test_rationale_describes_strategy(self):
+        """Every rationale should list the arm allocation and the candidate's arm."""
         config = _make_config()
         engine = RecommendationEngine(config)
         y = _improving_y(20)
@@ -416,7 +490,13 @@ class TestAnnotate:
         )
 
         for rec in recs:
-            assert "α=" in rec.rationale
+            assert "Strategy allocation:" in rec.rationale
+            for label in ("exploit", "balanced", "model-explore", "geometric-explore"):
+                assert label in rec.rationale
+            assert (
+                "top pick within the" in rec.rationale
+                or "rank" in rec.rationale
+            )
 
     def test_stagnation_in_rationale(self):
         """When stagnation is high, rationale should mention it."""
@@ -523,6 +603,6 @@ class TestEdgeCases:
         y_opt = np.full(15, 5.0)
         y = np.concatenate([y_warm, y_opt])
 
-        _, _, stag = engine._assess(_make_gp_report(), y)
-        # 14 stagnant out of 15 opt observations
-        assert stag > 0.5
+        sig = engine._compute_signals(_make_gp_report(), y, _make_coverage())
+        # 14 of 15 opt obs stagnant → raw 0.933; after deadband (0.933-0.3)/0.7 ≈ 0.90
+        assert sig.stagnation > 0.5

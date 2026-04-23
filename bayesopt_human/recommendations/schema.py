@@ -17,3 +17,5 @@ class Recommendation:
     rationale: str  # Plain-language explanation
     confidence: str  # "high", "medium", "low"
     priority: int  # 1 = top recommendation
+    arm: str  # "exploitation" | "balanced" | "exploration" | "space-filling"
+    is_arm_winner: bool = False  # Best candidate within its arm

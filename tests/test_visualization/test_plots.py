@@ -132,6 +132,7 @@ class TestCandidateTable:
                 candidate=np.array([3.0, 3.0]),
                 candidate_normalized=np.array([0.3, 0.3]),
                 source="EI", rationale="Good", confidence="high", priority=1,
+                arm="balanced", is_arm_winner=True,
             ),
         ]
         df = display_candidate_table(sample_candidates, recs)

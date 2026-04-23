@@ -101,6 +101,26 @@ def _ranked_candidates(
     return pairs
 
 
+def _annotate_recent_observations(
+    ax: plt.Axes,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    n_label_recent: int = 5,
+) -> None:
+    """Annotate the last ``n_label_recent`` points with 1-based round numbers."""
+    n_obs = len(xs)
+    if n_label_recent <= 0 or n_obs == 0:
+        return
+    start = max(0, n_obs - n_label_recent)
+    for i in range(start, n_obs):
+        ax.annotate(
+            str(i + 1),
+            (xs[i], ys[i]),
+            textcoords="offset points", xytext=(5, 4),
+            fontsize=7, color="#777777", zorder=4,
+        )
+
+
 def _make_legend(
     ax: plt.Axes,
     candidates: list[Candidate],
@@ -161,6 +181,10 @@ def _plot_top2_on_ax(
     ax.scatter(
         X_plot[best_idx, top2[0]], X_plot[best_idx, top2[1]],
         facecolors="none", edgecolors="red", s=200, linewidth=2.5, zorder=3,
+    )
+
+    _annotate_recent_observations(
+        ax, X_plot[:, top2[0]], X_plot[:, top2[1]],
     )
 
     if lo_coords is not None and len(lo_coords) > 0:
@@ -281,17 +305,9 @@ def _plot_pca_on_ax(
         facecolors="none", edgecolors="red", s=200, linewidth=2.5, zorder=3,
     )
 
-    # Label the last n_label_recent observations with 1-based round numbers
-    n_obs = len(y)
-    if n_label_recent > 0 and n_obs > 0:
-        start = max(0, n_obs - n_label_recent)
-        for i in range(start, n_obs):
-            ax.annotate(
-                str(i + 1),
-                (X_pca[i, 0], X_pca[i, 1]),
-                textcoords="offset points", xytext=(5, 4),
-                fontsize=7, color="#777777", zorder=4,
-            )
+    _annotate_recent_observations(
+        ax, X_pca[:, 0], X_pca[:, 1], n_label_recent=n_label_recent,
+    )
 
     if lo_coords is not None and len(lo_coords) > 0:
         lo_weighted = lo_coords * np.sqrt(weights)

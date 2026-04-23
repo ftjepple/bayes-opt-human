@@ -154,6 +154,19 @@ class TestRecommendHardSwitch:
         assert rec.action == ModelAction.SWITCH
         assert rec.recommended_idx == 2  # ISO preferred
 
+    def test_all_demoted_keeps_current(self):
+        """When every candidate has red diagnostics, keep the previous
+        rather than switching to another compromised model."""
+        candidates = [
+            _make_mc(loo_lpd=-1.0, demoted=True, ard=True, warping=True),
+            _make_mc(loo_lpd=-0.5, demoted=True, ard=True),
+            _make_mc(loo_lpd=-0.7, demoted=True, ard=False),
+        ]
+        rec = recommend_model(candidates, prev_choice_idx=0)
+        assert rec.action == ModelAction.KEEP
+        assert rec.recommended_idx == 0
+        assert "similarly compromised" in rec.rationale.lower()
+
 
 # ---------------------------------------------------------------------------
 # recommend_model — Significance test

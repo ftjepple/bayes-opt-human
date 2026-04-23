@@ -28,19 +28,28 @@ def display_candidate_table(
         Formatted DataFrame for display.
     """
     # Build recommendation lookup
-    rec_map: dict[str, int] = {}
+    rec_map: dict[str, tuple[int, bool]] = {}
     for rec in recommendations:
-        rec_map[rec.source] = rec.priority
+        rec_map[rec.source] = (rec.priority, rec.is_arm_winner)
 
     rows = []
     for cand in candidates:
-        priority = rec_map.get(cand.source, None)
-        rec_label = f"#{priority}" if priority is not None else ""
+        entry = rec_map.get(cand.source)
+        if entry is not None:
+            priority, is_arm_winner = entry
+            rec_label = f"#{priority}"
+        else:
+            priority, is_arm_winner = None, False
+            rec_label = ""
+
+        category_label = cand.category
+        if is_arm_winner:
+            category_label += " ★"
 
         rows.append({
             "Rank": rec_label,
             "Source": cand.source,
-            "Category": cand.category,
+            "Category": category_label,
             "Sur. Mean": f"{cand.posterior_mean:+.4f}",
             "Sur. Std": f"{cand.posterior_std:+.4f}",
             "EI": f"{math.exp(cand.expected_improvement):+.4f}",

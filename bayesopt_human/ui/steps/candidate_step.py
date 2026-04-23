@@ -88,10 +88,12 @@ class CandidateStep(BaseStep):
                 f"</div>"
             )
 
-        # Build dropdown options
+        # Build dropdown options. ★ marks the best candidate within its arm.
         options = {}
         for rec in result.recommendations:
             label = f"[Rank {rec.priority}] {rec.source}"
+            if rec.is_arm_winner:
+                label += " ★"
             if rec.priority == 1:
                 label += " *"
             options[label] = rec.priority

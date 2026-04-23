@@ -1,9 +1,15 @@
-"""Data-driven recommendation engine (5-phase scoring)."""
+"""Arm-based recommendation engine.
+
+Allocates weight across four strategy arms — exploit, balanced, model-explore,
+geometric-explore — from four signals (urgency, GP calibration, stagnation,
+coverage need). Each candidate is scored as ``w_arm * within-arm percentile``.
+"""
 
 from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.stats import rankdata
@@ -19,15 +25,54 @@ from bayesopt_human.utils import stagnation_length
 logger = logging.getLogger("bayesopt_human")
 
 
-class RecommendationEngine:
-    """Data-driven recommendation engine.
+# Arm keys match the category strings assigned during candidate generation.
+ARM_KEYS: tuple[str, ...] = (
+    "exploitation",
+    "balanced",
+    "exploration",
+    "space-filling",
+)
 
-    Five-phase pipeline:
+# User-facing arm labels.
+ARM_LABEL: dict[str, str] = {
+    "exploitation": "exploit",
+    "balanced": "balanced",
+    "exploration": "model-explore",
+    "space-filling": "geometric-explore",
+}
+
+# The natural per-candidate metric used to rank within each arm.
+ARM_METRIC_KEY: dict[str, str] = {
+    "exploitation": "p_exploit",
+    "balanced": "p_ei",
+    "exploration": "p_explore",
+    "space-filling": "p_coverage",
+}
+
+
+@dataclass
+class Signals:
+    """Four signals that drive the arm allocation."""
+
+    urgency: float           # u — 0 at start, 1 at final evaluation
+    gp_quality: float        # q — 1 when calibration_var=1, decays away
+    stagnation: float        # s — deadband-adjusted stagnation fraction
+    stagnation_raw: float    # raw stagnation fraction (for reporting)
+    coverage_need: float     # c — 0 when coverage at optimum, 1 when far
+    exploit_pull: float      # = u
+    explore_pull: float      # = clip(1, (1-u) + s + c)
+
+
+class RecommendationEngine:
+    """Arm-based recommendation engine.
+
+    Six-phase pipeline:
       1. NORMALIZE — rank-percentile all candidate metrics
-      2. ASSESS   — derive urgency, GP quality, stagnation pressure
-      3. SCORE    — blend exploitation vs exploration via α
-      4. DIVERSIFY — demote near-duplicate candidates
-      5. ANNOTATE  — per-candidate confidence + rationale
+      2. ASSESS    — derive signals (u, q, s, c) and pulls
+      3. ALLOCATE  — weights across the four strategy arms
+      4. SCORE     — score_i = w_arm(i) · within-arm percentile
+      5. DIVERSIFY — demote near-duplicate candidates
+      6. ANNOTATE  — per-candidate confidence + rationale
     """
 
     def __init__(self, config: OptimizationConfig) -> None:
@@ -41,18 +86,7 @@ class RecommendationEngine:
         svm_report: SVMReport,
         y: np.ndarray,
     ) -> list[Recommendation]:
-        """Generate ranked recommendations.
-
-        Args:
-            candidates: Candidate points from all strategies.
-            gp_report: GP fit diagnostics (includes calibration_var).
-            coverage: Coverage metrics (KNN distances).
-            svm_report: SVM sense-check report.
-            y: Raw objective values in observation order.
-
-        Returns:
-            Ranked list of Recommendation objects.
-        """
+        """Generate ranked recommendations."""
         if not candidates:
             return []
 
@@ -62,34 +96,24 @@ class RecommendationEngine:
         percentiles = self._normalize(candidates, n)
 
         # Phase 2: ASSESS
-        urgency, gp_quality, stag_pressure = self._assess(gp_report, y)
+        signals = self._compute_signals(gp_report, y, coverage)
 
-        # Phase 3: SCORE
-        alpha = max(1 - urgency, 1 - gp_quality, stag_pressure)
-        alpha = min(max(alpha, 0.0), 1.0)
+        # Phase 3: ALLOCATE
+        arm_weights = self._compute_arm_weights(signals)
 
-        coverage_ratio = coverage.ratio_to_optimal_flat
-        coverage_need = 1.0 - 1.0 / max(coverage_ratio, 1.0)
+        # Phase 4: SCORE
+        scores, within_arm_pct, within_arm_rank, arm_size, arm_winners = (
+            self._score(candidates, percentiles, arm_weights)
+        )
 
-        scores = np.empty(n)
-        for i in range(n):
-            p_exploit = percentiles["p_exploit"][i]
-            p_explore = percentiles["p_explore"][i]
-            p_ei = percentiles["p_ei"][i]
-            p_coverage = percentiles["p_coverage"][i]
-
-            p_explore_composite = (
-                (1 - coverage_need) * p_explore + coverage_need * p_coverage
-            )
-            scores[i] = (1 - alpha) * p_exploit + alpha * p_explore_composite + p_ei
-
-        # Phase 4: DIVERSIFY
+        # Phase 5: DIVERSIFY
         order = self._diversify(candidates, scores, coverage)
 
-        # Phase 5: ANNOTATE
+        # Phase 6: ANNOTATE
         recommendations = self._annotate(
-            candidates, percentiles, scores, order,
-            alpha, urgency, gp_quality, stag_pressure,
+            candidates, percentiles, order,
+            signals, arm_weights,
+            within_arm_pct, within_arm_rank, arm_size, arm_winners,
             gp_report, svm_report,
         )
 
@@ -102,7 +126,7 @@ class RecommendationEngine:
     def _normalize(
         self, candidates: list[Candidate], n: int,
     ) -> dict[str, np.ndarray]:
-        """Rank-percentile all candidate metrics."""
+        """Rank-percentile all candidate metrics across the full slate."""
         means = np.array([c.posterior_mean for c in candidates])
         stds = np.array([c.posterior_std for c in candidates])
         eis = np.array([c.expected_improvement for c in candidates])
@@ -119,7 +143,6 @@ class RecommendationEngine:
                 ranks = rankdata(-values, method="average")
             return (ranks - 1) / (n - 1)
 
-        # Direction-aware exploitation percentile
         if self.config.direction == "maximize":
             p_exploit = _to_percentile(means, higher_is_better=True)
         else:
@@ -136,33 +159,138 @@ class RecommendationEngine:
     # Phase 2: ASSESS
     # ------------------------------------------------------------------
 
-    def _assess(
-        self, gp_report: GPFitReport, y: np.ndarray,
-    ) -> tuple[float, float, float]:
-        """Derive urgency, GP quality, and stagnation pressure."""
+    def _compute_signals(
+        self,
+        gp_report: GPFitReport,
+        y: np.ndarray,
+        coverage: CoverageReport,
+    ) -> Signals:
+        """Derive the four driving signals plus the exploit/explore pulls."""
         remaining = self.config.remaining
         budget = self.config.optimization_budget
         warmstart = self.config.warmstart
 
         # Urgency: 0 at start, 1 at final evaluation
-        urgency = 1.0 - (remaining - 1) / max(budget - 1, 1)
-        urgency = min(max(urgency, 0.0), 1.0)
+        u = 1.0 - (remaining - 1) / max(budget - 1, 1)
+        u = _clip01(u)
 
-        # GP quality: peaks at calibration_var=1.0, decays away from it
+        # GP quality: peaks at calibration_var=1, symmetric in log space.
         cal_var = max(gp_report.calibration_var, 1e-12)
-        gp_quality = math.exp(-abs(math.log(cal_var)))
-        gp_quality = min(max(gp_quality, 0.0), 1.0)
+        q = math.exp(-abs(math.log(cal_var)))
+        q = _clip01(q)
 
-        # Stagnation pressure
+        # Stagnation: deadband-adjusted — the first 30% of the run's
+        # stagnation fraction is ignored so small-sample noise doesn't
+        # trigger the signal prematurely.
         n_opt_obs = self.config.n_obs - warmstart
         stag = stagnation_length(y, self.config.direction, warmstart)
-        stag_pressure = stag / max(n_opt_obs, 1)
-        stag_pressure = min(max(stag_pressure, 0.0), 1.0)
+        s_raw = stag / max(n_opt_obs, 1)
+        s = _clip01(max(0.0, (s_raw - 0.3) / 0.7))
 
-        return urgency, gp_quality, stag_pressure
+        # Coverage need: 0 when coverage matches an even sample at the
+        # current sample size, rising toward 1 when observed points leave
+        # large gaps in the search space.
+        coverage_ratio = coverage.ratio_to_optimal_flat
+        c = _clip01(1.0 - 1.0 / max(coverage_ratio, 1.0))
+
+        exploit_pull = u
+        explore_pull = _clip01((1.0 - u) + s + c)
+
+        return Signals(
+            urgency=u, gp_quality=q,
+            stagnation=s, stagnation_raw=s_raw,
+            coverage_need=c,
+            exploit_pull=exploit_pull, explore_pull=explore_pull,
+        )
 
     # ------------------------------------------------------------------
-    # Phase 4: DIVERSIFY
+    # Phase 3: ALLOCATE
+    # ------------------------------------------------------------------
+
+    def _compute_arm_weights(self, sig: Signals) -> dict[str, float]:
+        """Allocate weight across the four strategy arms.
+
+        - exploit       = exploit_pull · max(q, 0.2)
+        - balanced      = 0.5 · (exploit_pull + explore_pull) · sqrt(q)
+        - model-explore = explore_pull · q
+        - geometric     = explore_pull · (1 - q) + 0.05
+
+        Weights are then normalized to sum to 1.
+        """
+        q = sig.gp_quality
+        q_floor = max(q, 0.2)
+
+        raw = {
+            "exploitation": sig.exploit_pull * q_floor,
+            "balanced": 0.5 * (sig.exploit_pull + sig.explore_pull) * math.sqrt(q),
+            "exploration": sig.explore_pull * q,
+            "space-filling": sig.explore_pull * (1.0 - q) + 0.05,
+        }
+
+        total = sum(raw.values())
+        if total <= 0:
+            # Degenerate (zero pulls everywhere). Fall back to uniform.
+            return {k: 0.25 for k in ARM_KEYS}
+        return {k: v / total for k, v in raw.items()}
+
+    # ------------------------------------------------------------------
+    # Phase 4: SCORE
+    # ------------------------------------------------------------------
+
+    def _score(
+        self,
+        candidates: list[Candidate],
+        percentiles: dict[str, np.ndarray],
+        arm_weights: dict[str, float],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int], set[int]]:
+        """Score candidates as ``w_arm · within-arm percentile``.
+
+        Returns:
+            scores: score per candidate
+            within_arm_pct: [0, 1] percentile within arm (best=1)
+            within_arm_rank: 1-based rank within arm (best=1)
+            arm_size: count of candidates per arm
+            arm_winners: set of indices that are top in their arm
+        """
+        n = len(candidates)
+        within_pct = np.zeros(n)
+        within_rank = np.ones(n, dtype=int)
+        arm_winners: set[int] = set()
+
+        members: dict[str, list[int]] = {k: [] for k in ARM_KEYS}
+        for i, cand in enumerate(candidates):
+            if cand.category not in members:
+                raise ValueError(
+                    f"Candidate '{cand.source}' has unknown category "
+                    f"'{cand.category}' (expected one of {ARM_KEYS})."
+                )
+            members[cand.category].append(i)
+
+        arm_size = {k: len(v) for k, v in members.items()}
+
+        for arm, idxs in members.items():
+            if not idxs:
+                continue
+            metric = percentiles[ARM_METRIC_KEY[arm]]
+            # Higher metric is better in all four cases (direction-aware
+            # handling is done inside _normalize for p_exploit).
+            arm_vals = np.array([metric[i] for i in idxs])
+            order = np.argsort(-arm_vals, kind="stable")
+            k = len(idxs)
+            for rank_pos, local_idx in enumerate(order):
+                g = idxs[local_idx]
+                within_rank[g] = rank_pos + 1
+                within_pct[g] = 1.0 if k == 1 else 1.0 - rank_pos / (k - 1)
+            arm_winners.add(idxs[order[0]])
+
+        scores = np.array([
+            arm_weights[c.category] * within_pct[i]
+            for i, c in enumerate(candidates)
+        ])
+        return scores, within_pct, within_rank, arm_size, arm_winners
+
+    # ------------------------------------------------------------------
+    # Phase 5: DIVERSIFY
     # ------------------------------------------------------------------
 
     def _diversify(
@@ -200,33 +328,32 @@ class RecommendationEngine:
         return final_order
 
     # ------------------------------------------------------------------
-    # Phase 5: ANNOTATE
+    # Phase 6: ANNOTATE
     # ------------------------------------------------------------------
 
     def _annotate(
         self,
         candidates: list[Candidate],
         percentiles: dict[str, np.ndarray],
-        scores: np.ndarray,
         order: list[int],
-        alpha: float,
-        urgency: float,
-        gp_quality: float,
-        stag_pressure: float,
+        signals: Signals,
+        arm_weights: dict[str, float],
+        within_arm_pct: np.ndarray,
+        within_arm_rank: np.ndarray,
+        arm_size: dict[str, int],
+        arm_winners: set[int],
         gp_report: GPFitReport,
         svm_report: SVMReport,
     ) -> list[Recommendation]:
         """Build Recommendation objects with rationale and confidence."""
-        # Determine dominant signal for α
-        signals = {
-            "budget pressure": 1 - urgency,
-            "GP quality": 1 - gp_quality,
-            "stagnation": stag_pressure,
-        }
-        dominant = max(signals, key=signals.get)
-
-        # Per-candidate confidence scores
         n = len(candidates)
+
+        # Shared header text reused on every recommendation.
+        allocation_line = _format_allocation(arm_weights)
+        why_line = _format_allocation_reasons(signals, arm_weights)
+
+        # Per-candidate confidence scores (unchanged in intent, now using q).
+        q = signals.gp_quality
         conf_scores = np.empty(n)
         for i in range(n):
             p_explore_pct = percentiles["p_explore"][i]
@@ -237,9 +364,8 @@ class RecommendationEngine:
                 svm_factor = 1.0
             else:
                 svm_factor = 0.5
-            conf_scores[i] = gp_quality * (1 - p_explore_pct) * svm_factor
+            conf_scores[i] = q * (1 - p_explore_pct) * svm_factor
 
-        # Tercile thresholds
         if n >= 3:
             sorted_conf = np.sort(conf_scores)
             low_thresh = sorted_conf[n // 3]
@@ -261,38 +387,33 @@ class RecommendationEngine:
             else:
                 confidence = "low"
 
-            # Rationale
-            parts: list[str] = []
+            # Per-candidate rationale
+            arm = cand.category
+            arm_label = ARM_LABEL[arm]
+            rank_in_arm = int(within_arm_rank[idx])
+            size_of_arm = arm_size[arm]
+            is_winner = idx in arm_winners
+            winner_tag = " ★" if is_winner else ""
 
-            # State description
-            parts.append(
-                f"α={alpha:.2f} (driven by {dominant})."
-            )
+            if is_winner:
+                candidate_line = (
+                    f"This candidate is the top pick within the "
+                    f"{arm_label} arm (rank 1/{size_of_arm}){winner_tag}."
+                )
+            else:
+                candidate_line = (
+                    f"This candidate sits at rank {rank_in_arm}/{size_of_arm} "
+                    f"within the {arm_label} arm."
+                )
 
-            # Per-candidate rank info
-            ei_rank = int(rankdata(-percentiles["p_ei"])[idx])
-            exploit_rank = int(rankdata(-percentiles["p_exploit"])[idx])
-            explore_rank = int(rankdata(-percentiles["p_explore"])[idx])
-            parts.append(
-                f"EI rank {ei_rank}/{n}, "
-                f"exploit rank {exploit_rank}/{n}, "
-                f"explore rank {explore_rank}/{n}."
-            )
+            parts = [allocation_line, why_line, candidate_line]
 
-            # SVM info
+            # SVM note
             if svm_report.is_reliable:
                 if cand.svm_prediction is True:
                     parts.append("SVM agrees: likely top quartile.")
                 elif cand.svm_prediction is False:
                     parts.append("SVM disagrees: may not be top quartile.")
-
-            # Stagnation note
-            if stag_pressure > 0.3:
-                parts.append("Stagnation detected: exploration weighted higher.")
-
-            # Final evaluation note
-            if self.config.remaining <= 1:
-                parts.append("Final evaluation: exploitation strongly favored.")
 
             rationale = " ".join(parts)
 
@@ -304,7 +425,79 @@ class RecommendationEngine:
                     rationale=rationale,
                     confidence=confidence,
                     priority=priority,
+                    arm=arm,
+                    is_arm_winner=is_winner,
                 )
             )
 
         return recommendations
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _clip01(x: float) -> float:
+    return min(max(x, 0.0), 1.0)
+
+
+def _format_allocation(arm_weights: dict[str, float]) -> str:
+    parts = [
+        f"{ARM_LABEL[k]} {arm_weights[k] * 100:.0f}%"
+        for k in ARM_KEYS
+    ]
+    return "Strategy allocation: " + " · ".join(parts) + "."
+
+
+def _format_allocation_reasons(
+    signals: Signals, arm_weights: dict[str, float],
+) -> str:
+    """Explain *why* the allocation came out the way it did.
+
+    We name the active signals (those pulling weight away from a neutral
+    allocation) in plain language. Silent when all signals are neutral.
+    """
+    notes: list[str] = []
+
+    # GP calibration is the strongest discriminator — always call it out.
+    if signals.gp_quality < 0.5:
+        notes.append(
+            "the GP is poorly calibrated, so model-dependent strategies are "
+            "downweighted in favour of geometric exploration"
+        )
+    elif signals.gp_quality >= 0.9:
+        notes.append(
+            "the GP is well calibrated, so model-based strategies are trusted"
+        )
+
+    if signals.urgency >= 0.7:
+        notes.append(
+            "the evaluation budget is nearly exhausted, pushing weight "
+            "toward exploitation"
+        )
+    elif signals.urgency <= 0.3:
+        notes.append(
+            "the evaluation budget still has headroom, leaving room for "
+            "exploration"
+        )
+
+    if signals.stagnation > 0.0:
+        notes.append(
+            "recent progress has shown stagnation, boosting exploration"
+        )
+
+    if signals.coverage_need >= 0.5:
+        notes.append(
+            "observed points leave large gaps in the search space, boosting "
+            "exploration"
+        )
+
+    if not notes:
+        return "Why: all signals are neutral."
+
+    top_arm = max(arm_weights, key=arm_weights.get)
+    return (
+        f"Why: {'; '.join(notes)} — the {ARM_LABEL[top_arm]} arm carries "
+        f"the most weight."
+    )
