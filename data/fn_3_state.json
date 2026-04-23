@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "config_name": "fn_3",
-  "last_updated": "2026-04-12T21:42:29",
+  "last_updated": "2026-04-23T11:02:18",
   "model_choice": {
     "output_transform": "signed_log1p",
     "ard": true,
     "warping": false,
-    "loo_mae": 0.47389238962973745,
-    "loo_lpd": -0.7746824148227467,
-    "calibration_var": 1.0892357912767716,
-    "n_obs_when_chosen": 42
+    "loo_mae": 0.3399591227846814,
+    "loo_lpd": -0.04444112064813508,
+    "calibration_var": 1.0712852856007404,
+    "n_obs_when_chosen": 27
   },
   "rounds": [
     {
@@ -136,6 +136,42 @@
       "candidate_posterior_mean": 0.8847103936047885,
       "candidate_posterior_std": 0.28492964331757015,
       "candidate_expected_improvement": -1.376916714918506,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 8,
+      "n_obs": 43,
+      "timestamp": "2026-04-14T08:37:05",
+      "model_output_transform": "signed_log1p",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.47617678817605985,
+      "model_loo_lpd": -0.8082684800056519,
+      "model_calibration_var": 1.10094643130425,
+      "candidate_source": "Expected Improvement",
+      "candidate_category": "balanced",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 0.5791828021110312,
+      "candidate_posterior_std": 0.36277854096939993,
+      "candidate_expected_improvement": -2.0799322215191,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 9,
+      "n_obs": 27,
+      "timestamp": "2026-04-23T11:02:18",
+      "model_output_transform": "signed_log1p",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.3399591227846814,
+      "model_loo_lpd": -0.04444112064813508,
+      "model_calibration_var": 1.0712852856007404,
+      "candidate_source": "Max GP Mean",
+      "candidate_category": "exploitation",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 0.6920299754917241,
+      "candidate_posterior_std": 0.08815298921633277,
+      "candidate_expected_improvement": -2.74252826914183,
       "candidate_was_custom": false
     }
   ]

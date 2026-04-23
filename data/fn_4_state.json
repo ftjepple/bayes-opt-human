@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "config_name": "fn_4",
-  "last_updated": "2026-04-12T21:45:51",
+  "last_updated": "2026-04-23T11:04:15",
   "model_choice": {
     "output_transform": "none",
     "ard": false,
     "warping": false,
-    "loo_mae": 0.09353757153273244,
-    "loo_lpd": 1.3155836894629973,
-    "calibration_var": 0.7500004760228215,
-    "n_obs_when_chosen": 57
+    "loo_mae": 0.13859430973556755,
+    "loo_lpd": 0.8402370150608912,
+    "calibration_var": 0.9667895604843901,
+    "n_obs_when_chosen": 42
   },
   "rounds": [
     {
@@ -100,6 +100,42 @@
       "candidate_posterior_mean": 0.6914315608187336,
       "candidate_posterior_std": 0.004019064491656925,
       "candidate_expected_improvement": -5.445006860181387,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 6,
+      "n_obs": 58,
+      "timestamp": "2026-04-14T08:39:50",
+      "model_output_transform": "none",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.08968003282193483,
+      "model_loo_lpd": 1.471146534103285,
+      "model_calibration_var": 0.5106625162001398,
+      "candidate_source": "UCB (kappa=low)",
+      "candidate_category": "exploitation",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 0.6761055631476516,
+      "candidate_posterior_std": 0.004198659027543564,
+      "candidate_expected_improvement": -6.048721512064502,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 7,
+      "n_obs": 42,
+      "timestamp": "2026-04-23T11:04:15",
+      "model_output_transform": "none",
+      "model_ard": false,
+      "model_warping": false,
+      "model_loo_mae": 0.13859430973556755,
+      "model_loo_lpd": 0.8402370150608912,
+      "model_calibration_var": 0.9667895604843901,
+      "candidate_source": "Max GP Mean",
+      "candidate_category": "exploitation",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 1.00954502403306,
+      "candidate_posterior_std": 0.00386917815449358,
+      "candidate_expected_improvement": -9.609551394121503,
       "candidate_was_custom": false
     }
   ]

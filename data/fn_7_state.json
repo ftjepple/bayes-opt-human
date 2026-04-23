@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "config_name": "fn_7",
-  "last_updated": "2026-04-12T21:58:50",
+  "last_updated": "2026-04-23T11:11:20",
   "model_choice": {
     "output_transform": "signed_log1p",
     "ard": true,
     "warping": false,
-    "loo_mae": 0.0857924568766468,
-    "loo_lpd": 0.7901678870230009,
-    "calibration_var": 0.11671960011673263,
-    "n_obs_when_chosen": 57
+    "loo_mae": 0.11624888316203313,
+    "loo_lpd": 0.2921508656088398,
+    "calibration_var": 0.24772606738368555,
+    "n_obs_when_chosen": 42
   },
   "rounds": [
     {
@@ -136,6 +136,60 @@
       "candidate_posterior_mean": 1.093069120239721,
       "candidate_posterior_std": 0.033236663506118674,
       "candidate_expected_improvement": -2.3670477966680004,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 8,
+      "n_obs": 41,
+      "timestamp": "2026-04-13T22:17:44",
+      "model_output_transform": "signed_log1p",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.13780174960831534,
+      "model_loo_lpd": 0.1001382003824501,
+      "model_calibration_var": 0.32348423603350174,
+      "candidate_source": "Expected Improvement",
+      "candidate_category": "balanced",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 2.921459872506502,
+      "candidate_posterior_std": 0.08610427430920893,
+      "candidate_expected_improvement": -3.234366678141818,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 9,
+      "n_obs": 58,
+      "timestamp": "2026-04-14T08:44:41",
+      "model_output_transform": "signed_log1p",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.0836583213412102,
+      "model_loo_lpd": 0.8427130426577729,
+      "model_calibration_var": 0.12081806277709006,
+      "candidate_source": "UCB (kappa=low)",
+      "candidate_category": "exploitation",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 1.0623682332227484,
+      "candidate_posterior_std": 0.007336274564543015,
+      "candidate_expected_improvement": -5.9520849735607,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 10,
+      "n_obs": 42,
+      "timestamp": "2026-04-23T11:11:20",
+      "model_output_transform": "signed_log1p",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.11624888316203313,
+      "model_loo_lpd": 0.2921508656088398,
+      "model_calibration_var": 0.24772606738368555,
+      "candidate_source": "Max GP Mean",
+      "candidate_category": "exploitation",
+      "candidate_confidence": "high",
+      "candidate_posterior_mean": 2.7760023844147224,
+      "candidate_posterior_std": 0.039683028047780775,
+      "candidate_expected_improvement": -3.5787530507046044,
       "candidate_was_custom": false
     }
   ]

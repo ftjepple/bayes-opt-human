@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "config_name": "fn_5",
-  "last_updated": "2026-04-12T21:50:14",
+  "last_updated": "2026-04-23T11:07:26",
   "model_choice": {
-    "output_transform": "signed_log1p",
+    "output_transform": "none",
     "ard": true,
     "warping": false,
-    "loo_mae": 0.3497955148840632,
-    "loo_lpd": -0.22364976023205405,
-    "calibration_var": 0.35857248294404725,
-    "n_obs_when_chosen": 47
+    "loo_mae": 0.06542336505759785,
+    "loo_lpd": 0.2624374977833809,
+    "calibration_var": 0.5750191802637512,
+    "n_obs_when_chosen": 32
   },
   "rounds": [
     {
@@ -172,6 +172,42 @@
       "candidate_posterior_mean": 1.0210799128980739,
       "candidate_posterior_std": 0.0695441320744618,
       "candidate_expected_improvement": -2.5017245798702294,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 10,
+      "n_obs": 48,
+      "timestamp": "2026-04-14T08:41:11",
+      "model_output_transform": "none",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.1739985560183447,
+      "model_loo_lpd": -0.1321263893152983,
+      "model_calibration_var": 0.5804866197755595,
+      "candidate_source": "Expected Improvement",
+      "candidate_category": "balanced",
+      "candidate_confidence": "medium",
+      "candidate_posterior_mean": 2.5547087908320596,
+      "candidate_posterior_std": 0.12760551333764705,
+      "candidate_expected_improvement": -5.25079096094602,
+      "candidate_was_custom": false
+    },
+    {
+      "round_number": 11,
+      "n_obs": 32,
+      "timestamp": "2026-04-23T11:07:26",
+      "model_output_transform": "none",
+      "model_ard": true,
+      "model_warping": false,
+      "model_loo_mae": 0.06542336505759785,
+      "model_loo_lpd": 0.2624374977833809,
+      "model_calibration_var": 0.5750191802637512,
+      "candidate_source": "Max-min distance (flat)",
+      "candidate_category": "space-filling",
+      "candidate_confidence": "medium",
+      "candidate_posterior_mean": 0.4405048973581018,
+      "candidate_posterior_std": 0.807755489916641,
+      "candidate_expected_improvement": -7.518720117843588,
       "candidate_was_custom": false
     }
   ]
