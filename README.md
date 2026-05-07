@@ -1,5 +1,18 @@
 # Bayes-Opt-Human
 
+Many real-world optimization problems involve experiments that are
+expensive to run — clinical trials, materials testing, equipment
+tuning, simulation studies. Bayes-Opt-Human helps choose what to test
+next under a constrained time or cost budget. After each result it
+fits a predictive model of how the system behaves across untested
+settings, quantifies how confident that prediction is, and proposes
+several candidate experiments with a written rationale for each. The
+tool provides guidance and diagnostics but the user makes the final
+call. The result is the best setting found within the budget, with a
+complete audit trail of every decision.
+
+## How it works
+
 Bayesian optimization of expensive black-box functions, with a human in the loop.
 
 Bayes-Opt-Human fits a Gaussian process surrogate, generates candidates from several
