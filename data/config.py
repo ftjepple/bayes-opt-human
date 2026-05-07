@@ -10,12 +10,12 @@ Usage:
 from bayesopt_human import OptimizationConfig
 
 CONFIGS = [
-    OptimizationConfig(name="fn_1", horizon=23, warmstart=10, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="multimodal"),
-    OptimizationConfig(name="fn_2", horizon=23, warmstart=10, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="multimodal"),
-    OptimizationConfig(name="fn_3", horizon=28, warmstart=15, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
-    OptimizationConfig(name="fn_4", horizon=43, warmstart=30, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
-    OptimizationConfig(name="fn_5", horizon=33, warmstart=20, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
-    OptimizationConfig(name="fn_6", horizon=33, warmstart=20, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
-    OptimizationConfig(name="fn_7", horizon=43, warmstart=30, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
-    OptimizationConfig(name="fn_8", horizon=53, warmstart=40, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
+    OptimizationConfig(name="fn_1", horizon=24, warmstart=10, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="multimodal"),
+    OptimizationConfig(name="fn_2", horizon=24, warmstart=10, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="multimodal"),
+    OptimizationConfig(name="fn_3", horizon=29, warmstart=15, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
+    OptimizationConfig(name="fn_4", horizon=44, warmstart=30, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
+    OptimizationConfig(name="fn_5", horizon=34, warmstart=20, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
+    OptimizationConfig(name="fn_6", horizon=34, warmstart=20, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unimodal"),
+    OptimizationConfig(name="fn_7", horizon=44, warmstart=30, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
+    OptimizationConfig(name="fn_8", horizon=54, warmstart=40, bounds=(0.0, 1.0), objective_column="objective", direction="maximize", modality="unknown"),
 ]

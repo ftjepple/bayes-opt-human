@@ -148,6 +148,19 @@ on the best alternative clears a significance threshold — and that
 threshold is stricter when the alternative is a more complex kernel
 (ISO < ARD < WARP) than the incumbent.
 
+**Model selection as meta-exploration.** Choosing the surrogate model
+(and output transform) each round is itself an explore-vs-exploit
+decision, one layer above the candidate selection. *Exploitation* means
+sticking with the current spec: the trajectory of past observations was
+chosen against that model, so its posterior is "tuned" to the data, and
+switching can disrupt convergence. *Exploration* means trying a
+different spec on the chance that it fits better, accepting that the
+data path may no longer be optimal for the new model. The inertia rules
+above implement this trade-off explicitly: they bias toward exploitation
+unless the LPD evidence is strong enough — and stricter when the
+proposed switch is to a more complex kernel, because the cost of being
+wrong scales with model complexity.
+
 **Demotion and warnings.** Each candidate is health-checked before ranking.
 If any check hits a "red" threshold the candidate is **demoted**: it still
 appears in the ranked table but below a separator, and the recommendation

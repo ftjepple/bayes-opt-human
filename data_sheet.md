@@ -2,16 +2,14 @@
 
 This datasheet documents the dataset accumulated during the Imperial
 College ML & AI **Bayesian Black-Box Optimisation (BBO)** capstone,
-as tracked in this repository. It follows the framework from
-Mini-lesson 21.1 (motivation, composition, collection, preprocessing,
-uses, distribution, maintenance).
+as tracked in this repository. 
 
 ## Motivation
 
 - **Purpose.** The dataset supports **sequential optimisation** of
   eight synthetic black-box objective functions under a strict
   evaluation budget. Each function starts from a course-provided
-  warmstart; the author then submits one query per function
+  warmstart; the participant then submits one query per function
   per round over **thirteen rounds** (one per week), and the platform returns the function
   evaluation. The dataset captures every submitted point query and
   every returned value, which is what the author's optimisation
@@ -23,7 +21,7 @@ uses, distribution, maintenance).
   2 through 8 inside the unit hypercube.
 - **Creator and context.** The **initial warmstart designs** and the
   **hidden function evaluations** were provided by the BBO capstone course. All
-  **per-round queries** were chosen by the student author using the
+  **per-round queries** were chosen by the author using the
   Bayes-Opt-Human library's `OptimizationStep` API (or, equivalently,
   its Panel web UI) on top of the accumulated history. The recorded
   `(x, y)` pairs are the join of those two sources.
@@ -43,26 +41,26 @@ uses, distribution, maintenance).
   evaluation, one column per parameter dimension, and one
   `objective` column for the function response. Rows are ordered
   chronologically (warmstart first, then one row per round).
-  After ten rounds the sizes are:
+  After all thirteen rounds the sizes are:
 
   | Function | Dims | Warmstart `n` | Opt. Rounds | Total `n` |
   | --- | ---: | ---: | ---: | ---: |
-  | `fn_1` | 2 | 10 | 10 | 20 |
-  | `fn_2` | 2 | 10 | 10 | 20 |
-  | `fn_3` | 3 | 15 | 10 | 25 |
-  | `fn_4` | 4 | 30 | 10 | 40 |
-  | `fn_5` | 4 | 20 | 10 | 30 |
-  | `fn_6` | 5 | 20 | 10 | 30 |
-  | `fn_7` | 6 | 30 | 10 | 40 |
-  | `fn_8` | 8 | 40 | 10 | 50 |
+  | `fn_1` | 2 | 10 | 13 | 23 |
+  | `fn_2` | 2 | 10 | 13 | 23 |
+  | `fn_3` | 3 | 15 | 13 | 28 |
+  | `fn_4` | 4 | 30 | 13 | 43 |
+  | `fn_5` | 4 | 20 | 13 | 33 |
+  | `fn_6` | 5 | 20 | 13 | 33 |
+  | `fn_7` | 6 | 30 | 13 | 43 |
+  | `fn_8` | 8 | 40 | 13 | 53 |
 
 - **Format.**
   Standard CSV with a header row.
   Parameter columns are named `x1`, `x2`, … `x<D>` (all in
   `[0, 1]`) and the objective column is named `objective`.
 
-- **Size.** After ten rounds, the total number of `(x, y)` pairs
-  across all eight functions is **255** (20 + 20 + 25 + 40 + 30 + 30 + 40 + 50). The on-disk footprint of the CSVs is roughly 27 KB. 
+- **Size.** After all thirteen rounds, the total number of `(x, y)`
+  pairs across all eight functions is **279** (23 + 23 + 28 + 43 + 33 + 33 + 43 + 53). The on-disk footprint of the CSVs is roughly 27 KB. 
 
 - **Completeness and gaps.** No missing values: every submitted
   point has a recorded function response. The dataset is complete in
@@ -84,7 +82,7 @@ uses, distribution, maintenance).
 
 - **Configuration fixed up front.** Every function has an `OptimizationConfig` defined in `data/config.py` with the horizon, warmstart count, bounds, objective-column name, direction, and modality prior. These were chosen before the first round and were **not** adjusted between rounds.
 
-- **Time frame.** At the time of writing, ten rounds of submissions, one round per week, over the capstone period. The total optimisation budget is thirteen rounds.
+- **Time frame.** Thirteen rounds of submissions, one round per week, over the capstone period.
 
 ## Preprocessing / cleaning / labelling
 

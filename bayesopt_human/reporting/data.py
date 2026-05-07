@@ -251,6 +251,12 @@ def _show_coverage_metrics_overview(ctx: DataSummaryContext) -> None:
         config = _config_for_entry(entry, ctx.configs)
         X_norm, _ = _normalize_entry(entry, config)
         report = coverage_metrics(X_norm, k=config.knn_k)
+        X_post = X_norm[config.warmstart:]
+        if len(X_post) >= 2:
+            report_post = coverage_metrics(X_post, k=config.knn_k)
+            ratio_post = f"{report_post.ratio_to_optimal_flat:.2f}"
+        else:
+            ratio_post = "N/A"
         entry_name = Path(entry.filepath).stem
         rows.append({
             "Function": entry_name,
@@ -258,12 +264,15 @@ def _show_coverage_metrics_overview(ctx: DataSummaryContext) -> None:
             "Min KNN": f"{report.min_knn_distance_flat:.4f}",
             "Optimal": f"{report.optimal_baseline_flat:.4f}",
             "Ratio": f"{report.ratio_to_optimal_flat:.2f}",
+            "Post-WS Ratio": ratio_post,
             "K": report.k,
         })
     df = pd.DataFrame(rows)
     print("\nCoverage Metrics (flat space):")
     print(df.to_string(index=False))
     print("  Ratio = Avg KNN / Optimal. Values near 1.0 = well-spread design.")
+    print("  Post-WS Ratio = same metric on post-warmstart points only.")
+    print("  Lower than Ratio suggests the optimizer concentrated (exploitation).")
 
 
 def _show_modality_overview(ctx: DataSummaryContext) -> None:
@@ -475,6 +484,16 @@ def _show_coverage_metrics_individual(ctx: DataIndividualContext) -> None:
     print(f"  K neighbors:                 {report.k}")
     if report.ratio_to_optimal_flat > 3.0:
         print("  NOTE: Ratio > 3 suggests significant clustering or gaps in the design.")
+
+    X_post = X_norm[ctx.config.warmstart:]
+    print(f"\n  Post-warmstart points:       {len(X_post)} of {len(X_norm)}")
+    if len(X_post) >= 2:
+        report_post = coverage_metrics(X_post, k=ctx.config.knn_k)
+        print(f"  Post-WS ratio to optimal:    {report_post.ratio_to_optimal_flat:.2f}")
+        print("  Lower than full ratio = optimizer concentrated (exploitation).")
+        print("  Near full ratio = optimizer kept exploring.")
+    else:
+        print("  Post-WS ratio:               N/A (need >= 2 post-warmstart points)")
 
 
 def _show_modality_individual(ctx: DataIndividualContext) -> None:

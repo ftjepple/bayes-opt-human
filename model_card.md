@@ -9,7 +9,7 @@ Bayes-Opt-Human is a *library and workflow* rather than a single trained model. 
 | Field | Description |
 | --- | --- |
 | **Name** | Bayes-Opt-Human |
-| **Version** | 0.1.0 (captures up to round 10 capstone submissions; library continues to evolve) |
+| **Version** | 0.1.0 (final capstone submission state — all thirteen rounds complete; library continues to evolve) |
 | **Type** | Interactive Bayesian optimisation pipeline: GP surrogate + diagnostic-rich candidate generation + rule-based recommendation engine + explicit human decision loop |
 | **Core components** | GP surrogate via GPyTorch/BoTorch (ARD Matérn-5/2 kernel, adaptive jitter, four output transforms — `none`, `log`, `clipped_log`, `signed_log1p` — optional Beta-CDF input warping); model selector with health-check demotion rules and cross-round inertia via paired LOO-LPD t-tests; eight acquisition strategies (max-min distance in flat and surrogate space, max posterior variance, Expected Improvement, UCB/LCB at three κ levels, max GP mean); horizon-aware rule-based recommendation engine; Panel web UI |
 | **Interfaces** | Programmatic `OptimizationStep` API in `bayesopt_human/optimizer/step.py` for notebook use, and a Panel web app at `python -m bayesopt_human.ui` |
@@ -92,32 +92,61 @@ recommendation engine handle budget pressure (so the three UCB candidates stay g
 
 ## 4. Performance
 
-**Metric.** Best objective value observed on each function after the ten optimisation rounds. The "initial best" column is the maximum of the course-provided warmstart outputs; the "after W10" column is the maximum over all rows of the accumulated `data/fn_<k>.csv` (warmstart plus ten optimisation-round submissions). Values were recomputed directly from the checked-in files at the time this card was written.
+**Metric.** Best objective value observed on each function after the
+final thirteen optimisation rounds. The "initial best" column is the
+maximum of the course-provided warmstart outputs; the "final best"
+column is the maximum over all rows of the accumulated `data/fn_<k>.csv`
+(warmstart plus thirteen optimisation-round submissions). Values were
+recomputed directly from the checked-in files at the time this card
+was written. The "competition rank" column is the position of the
+final best out of 65 capstone participants.
 
-| Function | Dims | Warmstart `n` | Total `n` after W10 | Initial best | Best after W10 | Status |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `fn_1` | 2 | 10 | 20 | ≈ 7.7e-16 | ≈ 6.9e-15 | Stuck near zero |
-| `fn_2` | 2 | 10 | 20 | 0.6112 | **0.6808** | Incremental gains on a shallow peak |
-| `fn_3` | 3 | 15 | 25 | −0.0348 | **−0.00192** | Near the ceiling of a flat landscape |
-| `fn_4` | 4 | 30 | 40 | −4.026 | **0.6442** | Jump into a new basin |
-| `fn_5` | 4 | 20 | 30 | 1088.86 | **8662.48** | Apparent boundary optimum |
-| `fn_6` | 5 | 20 | 30 | −0.7143 | **−0.00532** | Steady improvement across rounds |
-| `fn_7` | 6 | 30 | 40 | 1.3650 | **2.6217** | Strong, monotonic gains after hitting the right region|
-| `fn_8` | 8 | 40 | 50 | 9.5985 | **9.9946** | Diminishing returns — near the plateau already |
+| Function | Dims | Warmstart `n` | Total `n` | Initial best | Final best | Competition rank | Status |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| `fn_1` | 2 | 10 | 23 | ≈ 7.7e-16 | ≈ 1.78e-08 | 23 / 65 | Degenerate landscape; censoring helped marginally |
+| `fn_2` | 2 | 10 | 23 | 0.6112 | **0.819** | **2 / 65** | Steady gains on a shallow peak |
+| `fn_3` | 3 | 15 | 28 | −0.0348 | **−3.4e-04** | **2 / 65** | Approached ceiling of a flat landscape |
+| `fn_4` | 4 | 30 | 43 | −4.026 | **0.644** | 10 / 65 | Basin jump in mid-run; plateaued in last three rounds |
+| `fn_5` | 4 | 20 | 33 | 1088.86 | **8662.48** | 6 / 65 | Boundary optimum; gains slowed after corner identified |
+| `fn_6` | 5 | 20 | 33 | −0.7143 | **−5.3e-03** | **3 / 65** | Steady improvement across rounds |
+| `fn_7` | 6 | 30 | 43 | 1.3650 | **3.218** | **3 / 65** | Strong gains after exploration revealed a new basin |
+| `fn_8` | 8 | 40 | 53 | 9.5985 | **9.996** | **2 / 65** | Diminishing returns — entered final rounds near plateau |
+
+**Final workflow choices.** The selected output transform and kernel
+on each function's last round, plus the LOO calibration variance and
+LOO-MAE the model carried into that final candidate generation:
+
+| Function | Transform | Kernel | Calibration variance | LOO-MAE |
+| --- | --- | --- | ---: | ---: |
+| `fn_1` | `clipped_log` | ARD | 0.27 | 0.33 |
+| `fn_2` | `signed_log1p` | ARD | 13.91 | 0.29 |
+| `fn_3` | `signed_log1p` | ARD | 1.06 | 0.33 |
+| `fn_4` | `none` | ISO | 1.02 | 0.12 |
+| `fn_5` | `signed_log1p` | ARD | 0.37 | 0.15 |
+| `fn_6` | `none` | ARD | 7.09 | 0.23 |
+| `fn_7` | `signed_log1p` | ARD | 0.24 | 0.11 |
+| `fn_8` | `signed_log1p` | ARD | 0.27 | 0.16 |
+
+**Headline interpretation.** Six of eight functions finished in the
+top 10% of capstone participants and a seventh in the top 16%. The one
+clear outlier (`fn_1` at rank 23 / 65) is the function whose objective
+landscape was effectively flat after every available transform; the
+rank reflects a *landscape-bound* limit on what any acquisition
+strategy could recover, rather than a workflow failure.
 
 **Progress chart.** The figure below summarises the best-so-far
-trajectory on each of the eight functions across the ten optimisation
-rounds submitted to date. The chart is generated by the library's own
-summary-level `progress` report (`step.report_data(result, report="progress")`)
-against the latest `data/fn_<k>.csv` files.
+trajectory on each of the eight functions across the thirteen
+optimisation rounds. The chart is generated by the library's own
+summary-level `progress` report
+(`step.report_data(result, report="progress")`) against the latest
+`data/fn_<k>.csv` files.
 
-![Best-so-far progress across the eight capstone functions](docs/images/progress_after_w10.png)
+![Best-so-far progress across the eight capstone functions](docs/images/progress_final.png)
 
 **Notes on interpretation**
 
-- Percentages and cross-function deltas are not meaningful because the objective scales differ by many orders of magnitude (compare `fn_5` ≈ 8660 with `fn_1` ≈ 1e-15). 
-- `fn_1` never escaped the vicinity of zero. The raw data includes negative and positive objective values. The difference in positive values is much smaller than the variation in negative values. In order to accentuate differences between positive values and prevent larger negative values from dominating the surrogate function, a clipped_log output transform has been applied which censors negative values.
-- `fn_5` appears to have a maximum at the boundary of `[0, 1]^4`. The library's max-min-distance and UCB (high κ) strategies tend to push toward under-explored corners, and the best value so far sits right on the boundary.
+- Percentages and cross-function deltas are not meaningful because the objective scales differ by many orders of magnitude (compare `fn_5` ≈ 8660 with `fn_1` ≈ 1e-08).
+- `fn_1` never escaped the vicinity of zero. The raw data includes negative and positive objective values. The difference in positive values is much smaller than the variation in negative values. In order to accentuate differences between positive values and prevent larger negative values from dominating the surrogate function, a `clipped_log` output transform has been applied which censors negative values.
 
 ## 5. Assumptions and limitations
 
@@ -149,7 +178,7 @@ against the latest `data/fn_<k>.csv` files.
   indistinguishable. The author mitigated this by trusting the
   space-filling candidates early and the exploitation candidates
   late.
-- **Flat or near-constant regions (`fn_1`).** The optimiser has struggled to find a clear maximum for `fn_1`, which may be due to the absence of clear peaks in that function.
+- **Flat or near-constant regions (`fn_1`).** The optimiser has struggled to find a clear maximum for `fn_1`, which may be due to the absence of clear peaks in that function, or a misspecification of the GP surrogate models (e.g. assumption of stationarity)
 - **Full-rank GP scaling.** Fit time grows as `O(n^3)`. For the
   capstone's 13-round budget this is fine (total `n` never exceeds
   ~50), but the pipeline would need sparse GPs for longer runs.
@@ -169,23 +198,99 @@ against the latest `data/fn_<k>.csv` files.
   and traceable in the code, but none has been tuned against a
   held-out benchmark, so a systematic ablation could plausibly show
   any of them to be sub-optimal for a given class of problem.
-- **No benchmark comparison.** The library has not been evaluated
-  against standard black-box optimisation test suites, or individual reference functions and has not been compared
-  head-to-head with baseline BO packages.
-  All of the empirical evidence for its behaviour comes from the per-function
-  trajectories on the eight capstone problems summarised in §4. A
-  serious external audit would need to add systematic benchmark
-  runs against a reference library on a shared test suite before
-  any quantitative claims could be made about absolute performance.
+- **Limited external benchmarking.** The competition rank against
+  64 other capstone participants (§4) provides one external
+  comparison point: the workflow finished in the top 10% on six of
+  eight functions and the top 16% on a seventh. However, the
+  eight functions are a small fixed set rather than a randomised
+  test suite. The library has *not* been evaluated against standard
+  black-box optimisation test suites or compared head-to-head with
+  baseline BO packages on a shared problem. A serious external
+  audit would still need systematic benchmark runs against a
+  reference library (e.g. BoTorch's built-in BO loop) on a shared
+  test suite before quantitative claims could be made about *which
+  design choices* drive the result.
 - **Human-strategy mistakes.** The user can override the
   recommendation at every round. This can improve or degrade performance compared to a fully automated run. For the
   capstone the author erred on the side of accepting the
   recommendations unless the diagnostic reports made a clear case
   otherwise.
-- **SVM sense-check is heuristic.** The leave-one-out balanced
-  accuracy has a confidence interval and is reported as
-  "unreliable" when the CI overlaps chance, but it is still a
-  heuristic sense-check, not a calibrated model.
+
+**Empirical critique of the result.**
+
+Six of eight functions finished in the top 10% of capstone participants
+(ranks 2 to 6 / 65) and a seventh in the top 16%. The features of the
+workflow that most plausibly drove this:
+
+- **Diagnostic-first approach.** Calibration variance, length-scale
+  health, and stagnation surfaced model pathologies before they reached
+  the candidate ranking.
+- **Output-transform menu.** `clipped_log` rescued the only function
+  with a heavily mixed-sign objective (`fn_1`); `signed_log1p` was
+  selected on six of eight runs and demonstrably improved fit on
+  multi-scale outputs.
+- **Iterating on the tool, not the moves.** Library improvements
+  between rounds compounded in a way that round-by-round tactical
+  variation would not have.
+- **Explicit horizon awareness.** Late-round exploitation bias paid
+  off on `fn_2`, `fn_6`, `fn_7`, and `fn_8`.
+
+The same evidence reveals where the workflow underperformed:
+
+- **`fn_4`: kernel-choice plateau.** The only function with a final
+  ISO-kernel pick. After the basin jump in mid-run it produced no
+  further gains. ARD might have identified a better local descent
+  direction, but the simplicity prior won the model-selection vote.
+  Rank 10 / 65 — defensible but the weakest of the seven non-`fn_1`
+  results.
+- **`fn_5`: boundary optimum unverified.** Exploitation around the
+  corner stopped paying off after the corner was identified, and
+  exploration of other corners did not help either. The final value is
+  plausible but unverified.
+- **Explore/exploit reflex inversion under sustained miscalibration.**
+  Under persistent miscalibration the author switched back to
+  exploitation, which is the opposite of what the recommendation engine
+  prescribes (DESIGN §8: under poor calibration, weight flows to
+  *geometric* exploration). The outcomes on `fn_2` and `fn_6` (both
+  with bad calibration but good ranks) suggest this was not always
+  wrong, but the engine's prescribed fallback was never tested
+  head-to-head in the same conditions.
+
+**Failure modes the workflow itself would not catch.**
+
+- **Non-stationarity.** The Matérn kernel assumes one length-scale
+  regime. A function with sharply different smoothness in different
+  regions would be misfit globally, and no diagnostic in the current
+  set would flag it cleanly.
+- **Confirmation of a boundary optimum.** The acquisition functions
+  can propose corner points, but no diagnostic tells the user whether
+  they have actually found the boundary optimum or are still on the
+  way.
+- **Modality below the density threshold.** The KNN modality diagnostic
+  is gated by `N / D ≥ 5`. Several of the capstone functions never
+  crossed that threshold, so the modality verdict on those runs was
+  silently unavailable rather than wrong.
+
+**Planned improvements.**
+
+1. **Non-stationary surrogate models.** Several of the objective
+   functions appear not to satisfy the assumption of stationarity. If
+   a function has dramatically different characteristic length scales
+   in different regions, any stationary GP will struggle to produce a
+   sensible trajectory of function evaluations.
+2. **Asymmetric handling of calibration variance.** The workflow
+   currently flags models that are either overconfident or
+   underconfident, and treats the two cases the same way. Using the
+   sign of the deviation directly — for example, to correct the
+   posterior variance — could let the exploit and model-explore arms
+   degrade at different rates.
+3. **Benchmark against reference libraries.** The competition rank
+   provides one external benchmark, but the empirical evidence is
+   still limited to the eight capstone functions and a single run for
+   each. A systematic comparison against BoTorch's built-in BO loop
+   (or other optimisation libraries) on a shared test suite would
+   provide a quantitative test for the recommendation engine, and
+   could be used to calibrate some of the heuristic hyperparameters.
 
 ## 6. Ethical considerations and transparency
 

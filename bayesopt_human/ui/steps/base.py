@@ -148,7 +148,7 @@ class BaseStep:
                 pn.pane.HTML(
                     f"<pre style='font-size:12px; line-height:1.4; "
                     f"background:#fafafa; padding:12px; border-radius:4px; "
-                    f"overflow-x:auto; white-space:pre-wrap'>"
+                    f"overflow-x:auto; white-space:pre'>"
                     f"{text}</pre>",
                     sizing_mode="stretch_width",
                 )

@@ -14,19 +14,31 @@ package: you bring the data, it brings the statistics.
 - Two front-ends: a programmatic `OptimizationStep` API for notebooks, and a Panel web UI.
 
 See [DESIGN.md](DESIGN.md) for the model, diagnostics, and workflow
-rationale. See also the model card and datasheet for further information:
+rationale. See also the model card and datasheet for further
+information:
 
 - [model_card.md](model_card.md) — overview, intended use, per-round
   decision logic, performance on the eight capstone functions,
-  assumptions and limitations, and ethics/transparency notes.
+  assumptions, limitations, critical evaluation, and
+  ethics/transparency notes.
 - [data_sheet.md](data_sheet.md) — motivation, composition, collection
   process, preprocessing, appropriate/inappropriate uses, and
-  distribution/maintenance for the warmstart and per-round
-  query-response artefacts under `data/`.
+  distribution/maintenance.
 
 ## Background
 
-Bayes-Opt-Human was developed as a capstone project for the Imperial College `Machine Learning and Artificial Intelligence` certificate course in 2025/26. Eight black-box functions were provided with initial warmstart data and an optimization budget of 13 weekly evaluations. See [model_card.md](model_card.md) and [data_sheet.md](data_sheet.md) for the coursework documentation of the approach and the dataset.
+Bayes-Opt-Human was developed as a capstone project for the Imperial College `Machine Learning and Artificial Intelligence` certificate course in 2025/26. Eight black-box functions were provided with initial warmstart data and an optimization budget of 13 weekly evaluations. 
+
+## Outcome
+
+![Per-function competition rank against 65 capstone participants](docs/images/competition_rank.png)
+
+Across the eight capstone functions, the workflow finished in the
+top 10% of 65 capstone participants on six functions
+(`fn_2`, `fn_3`, `fn_5`, `fn_6`, `fn_7`, `fn_8` — ranks 2 to 6 / 65)
+and the top 16% on a seventh (`fn_4` — rank 10 / 65). See
+[model_card.md](model_card.md) for the full per-function table
+(final values, calibration, kernel, transform) and a critical evaluation.
 
 ## Install
 
@@ -76,8 +88,7 @@ next_point = step.choose_candidate(cand_result, choice=1)
 ```
 
 Evaluate `next_point` externally, append the result to the CSV, and re-run the
-cells. See [notebooks/demo.ipynb](notebooks/demo.ipynb) for a complete round trip
-on a trivial 2D objective.
+cells. See [notebooks/demo.ipynb](notebooks/demo.ipynb) for a complete round trip on a trivial 2D objective.
 
 ## Web UI
 
